@@ -10,8 +10,11 @@ import java.awt.event.WindowEvent;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -46,8 +49,8 @@ public class Client extends JFrame implements CardListener {
 
 	public Client() {
 		this.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-		this.setSize(640, 480);
-		this.setMinimumSize(new Dimension(384, 192));
+		this.setSize(640, 640);
+		this.setMinimumSize(new Dimension(480, 640));
 
 		this.addWindowListener(new WindowAdapter() {
 
@@ -61,10 +64,36 @@ public class Client extends JFrame implements CardListener {
 
 		});
 
-		String name = JOptionPane.showInputDialog(null, "Enter your display name:", "Name", JOptionPane.PLAIN_MESSAGE).trim();
-		String address = JOptionPane.showInputDialog(null, "Enter IP address:", "IP Address", JOptionPane.PLAIN_MESSAGE);
+		try {
+			Files.createFile(Paths.get("client/config.ini"));
+		} catch (IOException e) {}
 
-		if (name == null || address == null) System.exit(0);
+		String lastName = null, lastAddress = null;
+		try {
+			List<String> lines = Files.readAllLines(Paths.get("client/config.ini"));
+			for (String line : lines) {
+				if (line.startsWith("last-name=")) {
+					lastName = line.substring(line.indexOf('=') + 1);
+				} else if (line.startsWith("last-address=")) {
+					lastAddress = line.substring(line.indexOf('=') + 1);
+				}
+			}
+		} catch (IOException e) {}
+
+		Object no = JOptionPane.showInputDialog(null, "Enter your display name:", "Name", JOptionPane.PLAIN_MESSAGE, null, null, lastName);
+		if (no == null) System.exit(0);
+		String name = no.toString().trim();
+
+		Object ao = JOptionPane.showInputDialog(null, "Enter IP address:", "IP Address", JOptionPane.PLAIN_MESSAGE, null, null, lastAddress);
+		if (ao == null) System.exit(0);
+		String address = ao.toString().trim();
+
+		try {
+			PrintStream config = new PrintStream(Paths.get("client/config.ini").toFile());
+			config.println("last-name=" + name);
+			config.println("last-address=" + address);
+			config.close();
+		} catch (IOException e) {}
 
 		this.setTitle("SushiGo | " + name);
 
@@ -73,7 +102,7 @@ public class Client extends JFrame implements CardListener {
 		new Thread(new Runnable() {
 
 			@Override
-			public void run() {
+			public synchronized void run() {
 				int port;
 				try {
 					port = Integer.parseInt(as[1]);
@@ -131,11 +160,12 @@ public class Client extends JFrame implements CardListener {
 				}
 
 				Client.this.getContentPane().removeAll();
-				hand = new CardHand(256, cards);
+				hand = new CardHand(222, cards);
 				hand.addCardListener(Client.this);
 				Table table = new Table(index, names.toArray(new String[names.size()]));
+				table.getPlayerHand().addCardListener(Client.this);
 
-				Client.this.add(table, BorderLayout.PAGE_START);
+				Client.this.add(table);
 				Client.this.add(new JScrollPane(hand, JScrollPane.VERTICAL_SCROLLBAR_NEVER, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS), BorderLayout.PAGE_END);
 				Client.this.revalidate();
 				Client.this.repaint();
@@ -150,7 +180,9 @@ public class Client extends JFrame implements CardListener {
 					} else if (s.startsWith("c")) {
 						acceptInput = true;
 						acceptSticks = s.length() < 2;
-						hand.setEnabled(true);
+						hand.setEnabled(acceptInput);
+						if (acceptSticks) hand.enableAll();
+						table.getPlayerHand().setEnabled(acceptSticks);
 					} else if (s.startsWith("q")) {
 						int ct = 4 * (s.charAt(1) - 48);
 						int n = -1;
@@ -174,6 +206,40 @@ public class Client extends JFrame implements CardListener {
 								}
 							} catch (Exception e) {}
 						}
+					} else if (s.startsWith("g")) {
+						int n = s.charAt(1) - 48;
+						String str;
+						String[] scores = new String[n];
+						int[][] played = new int[n][];
+						int i = 0;
+						String winner = null;
+						while (!(str = read()).equals("d")) {
+							if (str.startsWith("w")) {
+								i = str.charAt(1) - 48;
+							} else if (str.startsWith("m")) {
+								int[] cs = new int[str.length() - 1];
+								for (int c = 0; c < cs.length; c++) {
+									cs[c] = str.charAt(c + 1) - 48;
+								}
+								played[i] = cs;
+							} else if (str.startsWith("p")) {
+								table.setPudding(i, str.charAt(1) - 48);
+							} else if (str.startsWith("h")) {
+								winner = str.substring(1);
+							} else {
+								if (scores[i] == null)
+									scores[i] = str + "\n";
+								else
+									scores[i] += str + "\n";
+							}
+						}
+						Scoresheet.show(Client.this, played, winner, scores);
+						table.clear();
+						try {
+							print("r ");
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
 					}
 				}
 
@@ -194,7 +260,6 @@ public class Client extends JFrame implements CardListener {
 			String ret = in.readLine();
 			return ret;
 		} catch (IOException e) {
-			e.printStackTrace();
 			this.dispose();
 			JOptionPane.showMessageDialog(null, "Your connection to the server has been lost.", "Connection Lost", JOptionPane.ERROR_MESSAGE);
 			return null;
@@ -208,6 +273,9 @@ public class Client extends JFrame implements CardListener {
 		if (e.getSource() == hand) {
 			((CardHand) e.getSource()).setEnabled(false);
 			print("" + (char) (e.card + 48));
+			if (!acceptSticks) {
+				((CardHand) e.getSource()).disable(e.card);
+			}
 		} else if (acceptSticks && ((CardHand) e.getSource()).getCards()[e.card] == 11) {
 			print("" + (char) 65);
 			((CardHand) e.getSource()).setEnabled(false);

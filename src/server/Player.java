@@ -7,7 +7,7 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 public class Player {
@@ -22,7 +22,7 @@ public class Player {
 	public int pudding, score;
 	public int[] cardCts;
 	
-	public final HashMap<String, Integer> scoreSummary = new HashMap<>();
+	public final LinkedHashMap<String, Integer> scoreSummary = new LinkedHashMap<>();
 	
 	public Player(Socket socket) throws IOException {
 		this.socket = socket;
@@ -65,7 +65,7 @@ public class Player {
 	 * @throws IOException If there is an IOException while reading.
 	 *         </ul>
 	 */
-	public String read() throws IOException {
+	public synchronized String read() throws IOException {
 		String ret = in.readLine();
 		System.out.println(Server.date.format(new Date()) + " [" + this.name + "] " + ret);
 		return ret;
@@ -75,7 +75,7 @@ public class Player {
 	 * <ul>
 	 * <li><b><i>ready</i></b><br><br>
 	 * {@code void ready()}<br><br>
-	 * Waits until the player is ready (i.e. sends <code>"r"</code>)<br>
+	 * Waits until the player is ready (i.e. sends <code>"r "</code>)<br>
 	 * </ul>
 	 */
 	public void ready() throws IOException {

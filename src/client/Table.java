@@ -2,9 +2,13 @@ package client;
 
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.SwingConstants;
 
 public class Table extends JPanel {
 
@@ -22,7 +26,9 @@ public class Table extends JPanel {
 
 		this.index = index;
 
-		this.names = names;
+		List<String> ns = Arrays.asList(names);
+		Collections.rotate(ns, index);
+		this.names = ns.toArray(new String[ns.size()]);
 		this.hands = new CardHand[names.length];
 		this.labels = new JLabel[names.length][3];
 		this.pudding = new int[names.length];
@@ -30,57 +36,49 @@ public class Table extends JPanel {
 
 		JPanel[] panels = new JPanel[names.length];
 		for (int i = 0; i < names.length; i++) {
-			int n = (i + index) % names.length;
+			int align = i == 0 || (names.length % 2 == 0 && i == names.length / 2) ? SwingConstants.CENTER : (i > names.length / 2 ? SwingConstants.RIGHT : SwingConstants.LEFT);
 
 			panels[i] = new JPanel(new BorderLayout());
-			hands[n] = new CardHand(128, new int[0]);
-			panels[i].add(hands[n]);
-			labels[n][0] = new JLabel(names[n] + (i == 0 ? " (You)" : "") + ": 0");
-			labels[n][1] = new JLabel("Pudding: 0");
-			labels[n][2] = new JLabel();
+			hands[i] = new CardHand(128, align, new int[0]);
+			panels[i].add(hands[i]);
+			labels[i][0] = new JLabel(names[i] + (i == 0 ? " (You)" : "") + ": 0", align);
+			labels[i][1] = new JLabel("Pudding: 0", align);
+			labels[i][2] = new JLabel("", align);
 			JPanel labelPanel = new JPanel(new GridLayout(0, 1));
 			panels[i].add(labelPanel, BorderLayout.PAGE_START);
-			labelPanel.add(labels[n][0]);
-			labelPanel.add(labels[n][1]);
-			labelPanel.add(labels[n][2]);
+			labelPanel.add(labels[i][0]);
+			labelPanel.add(labels[i][1]);
+			labelPanel.add(labels[i][2]);
 		}
 
 		switch (names.length) {
 			case 2:
-				this.add(panels[1]);
+				this.add(getPanel(panels[1]));
 				break;
-			case 3: {
-				JPanel panel = new JPanel(new GridLayout(1, 2));
-				panel.add(panels[1]);
-				panel.add(panels[2]);
-				this.add(panel);
+			case 3:
+				this.add(getPanel(panels[1], panels[2]));
 				break;
-			}
-			case 4: {
-				this.add(panels[2]);
-				JPanel panel = new JPanel(new GridLayout(1, 2));
-				panel.add(panels[1]);
-				panel.add(panels[3]);
-				this.add(panel);
+			case 4:
+				this.add(getPanel(panels[2]));
+				this.add(getPanel(panels[1], panels[3]));
 				break;
-			}
-			case 5: {
-				JPanel panel1 = new JPanel(new GridLayout(1, 2));
-				panel1.add(panels[2]);
-				panel1.add(panels[3]);
-				this.add(panel1);
-				JPanel panel2 = new JPanel(new GridLayout(1, 2));
-				panel2.add(panels[1]);
-				panel2.add(panels[4]);
-				this.add(panel2);
+			case 5:
+				this.add(getPanel(panels[2], panels[3]));
+				this.add(getPanel(panels[1], panels[4]));
 				break;
-			}
 		}
-		this.add(panels[0]);
+		this.add(getPanel(panels[0]));
+	}
+
+	private static JPanel getPanel(JPanel... panels) {
+		JPanel ret = new JPanel(new GridLayout(1, panels.length));
+		for (JPanel panel : panels)
+			ret.add(panel);
+		return ret;
 	}
 
 	public CardHand getPlayerHand() {
-		return hands[index % hands.length];
+		return hands[0];
 	}
 
 	public void setCards(int index, int[] cards) {
@@ -102,9 +100,14 @@ public class Table extends JPanel {
 	public void setScores(int index, int score) {
 		this.scores[(index + this.index) % this.scores.length] = score;
 	}
-	
+
 	public void setText(int index, String text) {
 		this.labels[(index + this.index) % this.labels.length][2].setText(text);
+	}
+
+	public void clear() {
+		for (CardHand hand : hands)
+			hand.setCards();
 	}
 
 }

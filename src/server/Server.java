@@ -1,8 +1,13 @@
 package server;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -13,7 +18,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Scanner;
 import java.util.TreeSet;
 
 public class Server {
@@ -29,29 +33,57 @@ public class Server {
 
 	public static final String[] cardNames = {"Tempura", "Sashimi", "Dumpling", "1 Maki Roll", "2 Maki Rolls", "3 Maki Rolls", "Egg Nigiri", "Salmon Nigiri", "Squid Nigiri", "Pudding", "Wasabi", "Chopsticks"};
 
+	protected static PrintStream log;
+
 	public static void main(String[] args) {
+		String path = "server/logs/" + new SimpleDateFormat("yyyy-MM-dd_HH.mm.ss").format(new Date()) + ".log";
+		Path logPath = Paths.get(path);
+		int origNum = 0;
+		while (Files.exists(logPath, LinkOption.NOFOLLOW_LINKS)) {
+			logPath = Paths.get(path + "_" + origNum++);
+		}
+		try {
+			Files.createFile(logPath);
+			log = new PrintStream(logPath.toFile());
+		} catch (IOException e) {}
+
 		try {
 			ServerSocket socket = new ServerSocket();
-			int port = 0;
-			Scanner input = new Scanner(System.in);
-			while (true) {
-				try {
-					System.out.println("Enter IP address:");
-					String address = input.nextLine();
-					while (true) {
-						System.out.println("Enter port:");
+			try {
+				Files.createFile(Paths.get("server/config.ini"));
+			} catch (IOException e) {}
+
+			String address = null;
+			int port = 11610;
+			try {
+				List<String> lines = Files.readAllLines(Paths.get("server/config.ini"));
+				for (String line : lines) {
+					if (line.startsWith("server-ip=")) {
+						address = line.substring(line.indexOf('=') + 1);
+					} else if (line.startsWith("server-port=")) {
 						try {
-							port = Integer.parseInt(input.nextLine());
-							if (port > 0 && port <= 65535) break;
-						} catch (Exception e) {}
+							port = Integer.parseInt(line.substring(line.indexOf('=') + 1));
+						} catch (NumberFormatException e) {}
 					}
-					socket.bind(new InetSocketAddress(address, port));
-					break;
-				} catch (Exception e) {
-					print("Failed to bind to port. Perhaps another server is already running on that port?");
 				}
+			} catch (IOException e) {
+				print("Failed to read from \"server/config.ini\".");
+				System.exit(0);
 			}
-			input.close();
+
+			if (address == null) {
+				print("Could not find property \"server-ip\" in \"server/config.ini\"");
+				System.exit(0);
+			}
+
+			print("Starting server on " + address + ":" + port + "...");
+
+			try {
+				socket.bind(new InetSocketAddress(address, port));
+			} catch (Exception e) {
+				print("Failed to bind to port. Perhaps another server is already running on that port?");
+				System.exit(0);
+			}
 			print("Server bound to " + socket.getInetAddress().getHostAddress() + ":" + port);
 
 			print("Shuffling cards...");
@@ -90,7 +122,7 @@ public class Server {
 				}
 			}
 			done = true;
-			Collections.shuffle(players);
+//			Collections.shuffle(players);
 
 			for (int i = 0; i < players.size(); i++) {
 				players.get(i).print("s" + players.size());
@@ -108,10 +140,7 @@ public class Server {
 					p.played.clear();
 					for (int i = 0; i < cardNo; i++)
 						p.cards.add(cards.pop());
-					String cardStr = "k";
-					for (Integer i : p.cards)
-						cardStr += (char) (i + 48);
-					p.print(cardStr);
+					p.print("k" + getCardsString(p.cards));
 				}
 
 				while (players.get(0).cards.size() > 1) {
@@ -123,12 +152,14 @@ public class Server {
 							int j = (ixs[i] >> 8) & 255;
 							int k = ixs[i] & 255;
 
-							players.get(i).played.add(players.get(i).cards.remove(j));
-							players.get(i).played.add(players.get(i).cards.remove(k));
+							players.get(i).played.add(players.get(i).cards.get(j));
+							players.get(i).played.add(players.get(i).cards.get(k));
+							Integer card1 = players.get(i).cards.remove(Math.max(j, k));
+							Integer card2 = players.get(i).cards.remove(Math.min(j, k));
 							players.get(i).cards.add(11);
 							players.get(i).played.remove(new Integer(11));
 
-							playLog.put(players.get(i), "chopsticks to play " + cardNames[j] + " and " + cardNames[k]);
+							playLog.put(players.get(i), "chopsticks to play " + cardNames[card1].toLowerCase() + " and " + cardNames[card2].toLowerCase());
 						} else {
 							Integer card = players.get(i).cards.remove(ixs[i]);
 							players.get(i).played.add(card);
@@ -142,10 +173,7 @@ public class Server {
 							p.print((char) (n + 48) + (players.get(n) == p ? "u" : ""));
 							p.print(players.get(n).name);
 							p.print("used " + playLog.get(players.get(n)));
-							String cardStr = "l";
-							for (Integer i : players.get(n).played)
-								cardStr += (char) (i + 48);
-							p.print(cardStr);
+							p.print("l" + getCardsString(players.get(n).played));
 						}
 					}
 
@@ -157,21 +185,16 @@ public class Server {
 					players.get(players.size() - 1).cards.clear();
 					players.get(players.size() - 1).cards.addAll(p0cards);
 
-					for (Player p : players) {
-						String cardStr = "k";
-						for (Integer i : p.cards)
-							cardStr += (char) (i + 48);
-						p.print(cardStr);
-					}
+					for (Player p : players)
+						p.print("k" + getCardsString(p.cards));
 				}
 				for (Player p : players) {
 					p.played.add(p.cards.remove(0));
 					p.scoreSummary.clear();
 				}
 
-				int[] wasabis = new int[3];
 				for (Player p : players) {
-					p.cardCts = new int[12];
+					p.cardCts = new int[15];
 					for (Integer i : p.played) {
 						if (i == 4 || i == 5) {
 							p.cardCts[3] += i - 2;
@@ -181,7 +204,7 @@ public class Server {
 
 						if (i > 5 && i < 9 && p.cardCts[10] > 0) {
 							p.cardCts[10]--;
-							wasabis[i - 6]++;
+							p.cardCts[i + 6]++;
 						}
 					}
 				}
@@ -221,28 +244,75 @@ public class Server {
 					dumplings += new int[] {0, 1, 3, 6, 10}[n];
 					p.scoreSummary.put(p.cardCts[2] + " dumplings", dumplings);
 
-					p.scoreSummary.put(p.cardCts[6] + " egg nigiri (" + wasabis[0] + " with wasabi)", p.cardCts[6] + wasabis[0] * 2);
-					p.scoreSummary.put(p.cardCts[7] + " salmon nigiri (" + wasabis[1] + " with wasabi)", 2 * (p.cardCts[7] + wasabis[1] * 2));
-					p.scoreSummary.put(p.cardCts[8] + " squid nigiri (" + wasabis[2] + " with wasabi)", 3 * (p.cardCts[8] + wasabis[2] * 2));
-
+					p.scoreSummary.put(p.cardCts[6] + " egg nigiri (" + p.cardCts[12] + " with wasabi)", p.cardCts[6] + p.cardCts[12] * 2);
+					p.scoreSummary.put(p.cardCts[7] + " salmon nigiri (" + p.cardCts[13] + " with wasabi)", 2 * (p.cardCts[7] + p.cardCts[13] * 2));
+					p.scoreSummary.put(p.cardCts[8] + " squid nigiri (" + p.cardCts[14] + " with wasabi)", 3 * (p.cardCts[8] + p.cardCts[14] * 2));
+					p.scoreSummary.put(p.cardCts[10] + " unused wasabi", 0);
+					p.scoreSummary.put(p.cardCts[11] + " chopsticks", 0);
 					p.pudding += p.cardCts[9];
 					p.scoreSummary.put(p.cardCts[9] + " pudding (total of " + p.pudding + ")", 0);
-					p.scoreSummary.put(p.cardCts[10] + " unused wasabi", 0);
-					p.scoreSummary.put(p.cardCts[10] + " chopsticks", 0);
 				}
 
-				for (int i = 0; i < players.size(); i++) {
-					System.out.println(players.get(i).name);
-					System.out.println(players.get(i).played);
-					Map<String, Integer> ss = players.get(i).scoreSummary;
-					for (String key : ss.keySet()) {
-						System.out.println(key + ": " + ss.get(key));
+				if (round == 2) {
+					TreeSet<Player> pudding = new TreeSet<>(new PlayerComp(-1));
+					pudding.addAll(players);
+					List<Player> pudding0 = new ArrayList<>(), pudding1 = new ArrayList<>();
+					for (Player p : players) {
+						if (p.pudding == pudding.first().pudding) {
+							pudding0.add(p);
+						} else if (p.pudding == pudding.last().pudding) {
+							pudding1.add(p);
+						}
 					}
-					int total = ss.values().stream().mapToInt(Integer::intValue).sum();
-					System.out.println("This round: " + total);
-					players.get(i).score += total;
-					System.out.println("Total: " + players.get(i).score);
+
+					for (Player p : pudding0)
+						p.scoreSummary.put("Most pudding", 6 / pudding0.size());
+					for (Player p : pudding1)
+						p.scoreSummary.put("Least pudding", -6 / pudding1.size());
 				}
+
+				for (Player p : players) {
+					p.print("g" + players.size());
+				}
+				for (int i = 0; i < players.size(); i++) {
+					Map<String, Integer> ss = players.get(i).scoreSummary;
+					int total = ss.values().stream().mapToInt(Integer::intValue).sum();
+					players.get(i).score += total;
+					for (Player p : players) {
+						p.print("w" + i);
+						p.print("p" + p.pudding);
+						p.print("m" + getCardsString(players.get(i).played));
+						p.print(" " + players.get(i).name + (players.get(i) == p ? " (You)" : ""));
+						p.print("");
+						for (String key : ss.keySet()) {
+							p.print(" " + key + ": " + ss.get(key));
+						}
+						p.print(" This round: " + total);
+						p.print(" Total: " + players.get(i).score);
+					}
+				}
+				if (round == 2) {
+					TreeSet<Player> rankings = new TreeSet<>(new PlayerComp(-2));
+					rankings.addAll(players);
+					for (Player p : players) {
+						p.print("h" + rankings.first().name);
+					}
+				}
+				for (Player p : players) {
+					p.print("d");
+				}
+
+				if (round < 2) {
+					for (Player p : players) {
+						try {
+							p.ready();
+						} catch (IOException e) {}
+					}
+				}
+			}
+
+			for (Player p : players) {
+				p.print("e");
 			}
 
 			socket.close();
@@ -266,6 +336,14 @@ public class Server {
 		}
 	}
 
+	private static String getCardsString(Iterable<? extends Number> cards) {
+		String ret = "";
+		for (Number i : cards) {
+			ret += (char) (i.intValue() + 48);
+		}
+		return ret;
+	}
+
 	protected static int[] getCardIndicies() {
 		int[] ret = new int[players.size()];
 
@@ -281,8 +359,8 @@ public class Server {
 						do {
 							players.get(ix).print("c");
 							i = (int) players.get(ix).read().charAt(0) - 48;
-						} while (i != 65 && (i < 0 || i >= players.get(ix).cards.size()));
-						if (i == 65) {
+						} while (i != 17 && (i < 0 || i >= players.get(ix).cards.size()));
+						if (i == 17) {
 							int j, k;
 							do {
 								players.get(ix).print("ch");
@@ -325,6 +403,7 @@ public class Server {
 	 */
 	protected static void print(String text) {
 		System.out.println(date.format(new Date()) + " [INFO] " + text);
+		if (log != null) log.println(date.format(new Date()) + " [INFO] " + text);
 	}
 
 	private static final class PlayerComp implements Comparator<Player> {
@@ -337,7 +416,7 @@ public class Server {
 
 		@Override
 		public int compare(Player o1, Player o2) {
-			int d = -Integer.compare(o1.cardCts[index], o2.cardCts[index]);
+			int d = -Integer.compare(index == -2 ? o1.score : (index == -1 ? o1.pudding : o1.cardCts[index]), index == -2 ? o2.score : (index == -1 ? o2.pudding : o2.cardCts[index]));
 			if (d == 0) d = Integer.compare(o1.hashCode(), o2.hashCode());
 			return d;
 		}
