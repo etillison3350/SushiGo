@@ -6,7 +6,6 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 
@@ -50,7 +49,7 @@ public class Player {
 		} else {
 			out.println(text);
 			out.flush();
-			System.out.println(Server.date.format(new Date()) + " [SERVER -> " + this.name + "] " + text);
+			Server.print("SERVER -> " + this.name, text);
 		}
 	}
 
@@ -67,7 +66,7 @@ public class Player {
 	 */
 	public synchronized String read() throws IOException {
 		String ret = in.readLine();
-		System.out.println(Server.date.format(new Date()) + " [" + this.name + "] " + ret);
+		Server.print(this.name, ret);
 		return ret;
 	}
 

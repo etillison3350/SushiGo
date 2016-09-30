@@ -34,8 +34,11 @@ public class Server {
 	public static final String[] cardNames = {"Tempura", "Sashimi", "Dumpling", "1 Maki Roll", "2 Maki Rolls", "3 Maki Rolls", "Egg Nigiri", "Salmon Nigiri", "Squid Nigiri", "Pudding", "Wasabi", "Chopsticks"};
 
 	protected static PrintStream log;
+	protected static LogWindow logWindow;
 
 	public static void main(String[] args) {
+		logWindow = new LogWindow();
+		
 		String path = "server/logs/" + new SimpleDateFormat("yyyy-MM-dd_HH.mm.ss").format(new Date()) + ".log";
 		Path logPath = Paths.get(path);
 		int origNum = 0;
@@ -43,11 +46,15 @@ public class Server {
 			logPath = Paths.get(path + "_" + origNum++);
 		}
 		try {
+			Files.createDirectories(logPath.getParent());
 			Files.createFile(logPath);
 			log = new PrintStream(logPath.toFile());
-		} catch (IOException e) {}
-
-		try {
+			print("Log file created at " + logPath.toAbsolutePath().toString());
+		} catch (IOException e) {
+			print("ERROR", "Failed to create log at " + logPath.toAbsolutePath().toString());
+		}
+		
+		try {	
 			ServerSocket socket = new ServerSocket();
 			try {
 				Files.createFile(Paths.get("server/config.ini"));
@@ -67,12 +74,12 @@ public class Server {
 					}
 				}
 			} catch (IOException e) {
-				print("Failed to read from \"server/config.ini\".");
+				print("ERROR", "Failed to read from \"server/config.ini\".");
 				System.exit(0);
 			}
 
 			if (address == null) {
-				print("Could not find property \"server-ip\" in \"server/config.ini\"");
+				print("ERROR", "Could not find property \"server-ip\" in \"server/config.ini\"");
 				System.exit(0);
 			}
 
@@ -390,20 +397,15 @@ public class Server {
 
 		return ret;
 	}
-
-	/**
-	 * <ul>
-	 * <li><b><i>print</i></b><br>
-	 * <br>
-	 * {@code protected static void print(String text)}<br>
-	 * <br>
-	 * Outputs the given text as a server log<br>
-	 * @param text - The text to output
-	 *        </ul>
-	 */
-	protected static void print(String text) {
-		System.out.println(date.format(new Date()) + " [INFO] " + text);
-		if (log != null) log.println(date.format(new Date()) + " [INFO] " + text);
+	
+	public static void print(String name, String text) {
+		System.out.println(date.format(new Date()) + " [" + name + "] " + text);
+		if (log != null) log.println(date.format(new Date()) + " [" + name + "] " + text);
+		if (logWindow != null) logWindow.print(date.format(new Date()) + " [" + name + "] " + text);
+	}
+	
+	public static void print(String text) {
+		print("INFO", text);
 	}
 
 	private static final class PlayerComp implements Comparator<Player> {

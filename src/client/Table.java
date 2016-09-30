@@ -91,6 +91,7 @@ public class Table extends JPanel {
 
 	public void setPudding(int index, int pudding) {
 		this.pudding[(index + this.index) % this.pudding.length] = pudding;
+		this.labels[(index + this.index) % this.labels.length][1].setText("Pudding: " + pudding);
 	}
 
 	public int[] getScores() {
